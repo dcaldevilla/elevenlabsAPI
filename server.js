@@ -122,5 +122,48 @@ app.get("/variant/:id/description", async (req, res) => {
   }
 });
 
+function htmlToText(html = "") {
+  return html
+    .replace(/<\/li>\s*<li>/g, "\n- ")
+    .replace(/<li>/g, "- ")
+    .replace(/<\/li>/g, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, "")          // quita el resto de tags
+    .replace(/&nbsp;/g, " ")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
+app.get("/variant/:id/description_text", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const query = `
+      query VariantDesc($id: ID!) {
+        productVariant(id: $id) {
+          id
+          sku
+          product { id title vendor descriptionHtml }
+        }
+      }
+    `;
+    const data = await shopifyGraphQL(query, { id });
+    const v = data.productVariant;
+
+    const html = v?.product?.descriptionHtml || "";
+    res.json({
+      variant_id: v?.id,
+      sku: v?.sku,
+      title: v?.product?.title,
+      vendor: v?.product?.vendor,
+      description_text: htmlToText(html)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Running on ${PORT}`));
