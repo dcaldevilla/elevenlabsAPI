@@ -53,13 +53,14 @@ app.post("/resolve_reference", async (req, res) => {
 
     const qCandidates = [];
 
-// Buscamos primero el SKU completo entre comillas
+// búsqueda amplia (más flexible)
+	if (raw) qCandidates.push(raw);
+	if (ref) qCandidates.push(ref);
+	if (code) qCandidates.push(code);
+
+// búsqueda específica por sku como fallback
 	if (raw) qCandidates.push(`sku:"${raw}"`);
-
-// Luego solo la referencia
 	if (ref) qCandidates.push(`sku:"${ref}"`);
-
-// Luego solo el código
 	if (code) qCandidates.push(`sku:"${code}"`);
 
     const query = `
