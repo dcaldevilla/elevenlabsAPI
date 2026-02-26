@@ -166,5 +166,35 @@ app.get("/variant/:id/description_text", async (req, res) => {
   }
 });
 
+app.post("/description_text", async (req, res) => {
+  try {
+    const { variant_id } = req.body;
+    if (!variant_id) return res.status(400).json({ error: "variant_id is required" });
+
+    const query = `
+      query VariantDesc($id: ID!) {
+        productVariant(id: $id) {
+          id
+          sku
+          product { id title vendor descriptionHtml }
+        }
+      }
+    `;
+    const data = await shopifyGraphQL(query, { id: variant_id });
+    const v = data.productVariant;
+
+    const html = v?.product?.descriptionHtml || "";
+    res.json({
+      variant_id: v?.id,
+      sku: v?.sku,
+      title: v?.product?.title,
+      vendor: v?.product?.vendor,
+      description_text: htmlToText(html)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Running on ${PORT}`));
