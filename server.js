@@ -1,5 +1,6 @@
 import express from "express";
 import "dotenv/config";
+import he from "he";
 
 const app = express();
 app.use(express.json());
@@ -7,7 +8,11 @@ app.use(express.json());
 const SHOP = process.env.SHOPIFY_SHOP;
 const ADMIN_TOKEN = process.env.SHOPIFY_ADMIN_TOKEN;
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-07";
-const API_KEY = process.env.MW_API_KEY; // clave para que solo ElevenLabs/tu puedas llamar
+const API_KEY = process.env.MW_API_KEY;
+const VITORIA_LOCATION_ID = process.env.SHOPIFY_VITORIA_LOCATION_ID;
+
+// Health check sin protección (permite checks externos sin API key)
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 function requireApiKey(req, res, next) {
   if (!API_KEY) return res.status(500).json({ error: "MW_API_KEY not set" });
@@ -16,7 +21,6 @@ function requireApiKey(req, res, next) {
   next();
 }
 
-// Proteger TODO
 app.use(requireApiKey);
 
 async function shopifyGraphQL(query, variables = {}) {
@@ -44,7 +48,46 @@ function parseSku(text) {
   return { ref: s, code: null, raw: s };
 }
 
-app.get("/health", (req, res) => res.json({ ok: true }));
+function htmlToText(html = "") {
+  return he.decode(
+    html
+      .replace(/<\/li>\s*<li>/g, "\n- ")
+      .replace(/<li>/g, "- ")
+      .replace(/<\/li>/g, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\n{2,}/g, "\n")
+      .trim()
+  );
+}
+
+const VARIANT_GID_RE = /^gid:\/\/shopify\/ProductVariant\/\d+$/;
+
+const VARIANT_DESC_QUERY = `
+  query VariantDesc($id: ID!) {
+    productVariant(id: $id) {
+      id
+      sku
+      metafield(namespace: "custom", key: "variant_title") {
+        value
+      }
+      product { id title vendor }
+    }
+  }
+`;
+
+async function fetchVariantDescription(variant_id) {
+  const data = await shopifyGraphQL(VARIANT_DESC_QUERY, { id: variant_id });
+  const v = data.productVariant;
+  if (!v) return null;
+  return {
+    variant_id: v.id,
+    sku: v.sku,
+    title: v.product?.title,
+    vendor: v.product?.vendor,
+    description_text: v.metafield?.value ?? null,
+  };
+}
 
 app.post("/resolve_reference", async (req, res) => {
   try {
@@ -53,15 +96,15 @@ app.post("/resolve_reference", async (req, res) => {
 
     const qCandidates = [];
 
-// búsqueda amplia (más flexible)
-	if (raw) qCandidates.push(raw);
-	if (ref) qCandidates.push(ref);
-	if (code) qCandidates.push(code);
+    // búsqueda amplia (más flexible)
+    if (raw) qCandidates.push(raw);
+    if (ref) qCandidates.push(ref);
+    if (code) qCandidates.push(code);
 
-// búsqueda específica por sku como fallback
-	if (raw) qCandidates.push(`sku:"${raw}"`);
-	if (ref) qCandidates.push(`sku:"${ref}"`);
-	if (code) qCandidates.push(`sku:"${code}"`);
+    // búsqueda específica por sku como fallback
+    if (raw) qCandidates.push(`sku:"${raw}"`);
+    if (ref) qCandidates.push(`sku:"${ref}"`);
+    if (code) qCandidates.push(`sku:"${code}"`);
 
     const query = `
       query Variants($q: String!) {
@@ -85,7 +128,7 @@ app.post("/resolve_reference", async (req, res) => {
         sku: v.sku,
         barcode: v.barcode,
         title: v.product?.title,
-        vendor: v.product?.vendor
+        vendor: v.product?.vendor,
       }));
       if (candidates.length) break;
     }
@@ -96,101 +139,118 @@ app.post("/resolve_reference", async (req, res) => {
   }
 });
 
-app.get("/variant/:id/description", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const query = `
-      query VariantDesc($id: ID!) {
-        productVariant(id: $id) {
-          id
-          sku
-          product { id title vendor descriptionHtml }
-        }
-      }
-    `;
-    const data = await shopifyGraphQL(query, { id });
-    const v = data.productVariant;
-    res.json({
-      variant_id: v?.id,
-      sku: v?.sku,
-      product_id: v?.product?.id,
-      title: v?.product?.title,
-      vendor: v?.product?.vendor,
-      description_html: v?.product?.descriptionHtml
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-function htmlToText(html = "") {
-  return html
-    .replace(/<\/li>\s*<li>/g, "\n- ")
-    .replace(/<li>/g, "- ")
-    .replace(/<\/li>/g, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]*>/g, "")          // quita el resto de tags
-    .replace(/&nbsp;/g, " ")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-}
-
-app.get("/variant/:id/description_text", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const query = `
-      query VariantDesc($id: ID!) {
-        productVariant(id: $id) {
-          id
-          sku
-          product { id title vendor descriptionHtml }
-        }
-      }
-    `;
-    const data = await shopifyGraphQL(query, { id });
-    const v = data.productVariant;
-
-    const html = v?.product?.descriptionHtml || "";
-    res.json({
-      variant_id: v?.id,
-      sku: v?.sku,
-      title: v?.product?.title,
-      vendor: v?.product?.vendor,
-      description_text: htmlToText(html)
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 app.post("/description_text", async (req, res) => {
   try {
     const { variant_id } = req.body;
     if (!variant_id) return res.status(400).json({ error: "variant_id is required" });
+    if (!VARIANT_GID_RE.test(variant_id)) {
+      return res.status(400).json({ error: "variant_id must be a Shopify GID: gid://shopify/ProductVariant/{id}" });
+    }
 
-    const query = `
-      query VariantDesc($id: ID!) {
-        productVariant(id: $id) {
-          id
-          sku
-          product { id title vendor descriptionHtml }
+    const result = await fetchVariantDescription(variant_id);
+    if (!result) return res.status(404).json({ error: "Variant not found" });
+
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const VARIANT_PRICE_QUERY = `
+  query VariantPrice($id: ID!) {
+    productVariant(id: $id) {
+      id
+      sku
+      price
+      compareAtPrice
+      metafield(namespace: "custom", key: "variant_title") {
+        value
+      }
+      product { vendor }
+    }
+  }
+`;
+
+async function fetchVariantPrice(variant_id) {
+  const data = await shopifyGraphQL(VARIANT_PRICE_QUERY, { id: variant_id });
+  const v = data.productVariant;
+  if (!v) return null;
+  return {
+    variant_id: v.id,
+    sku: v.sku,
+    title: v.metafield?.value ?? null,
+    vendor: v.product?.vendor,
+    price: v.price,
+    compare_at_price: v.compareAtPrice ?? null,
+  };
+}
+
+app.post("/variant_price", async (req, res) => {
+  try {
+    const { variant_id } = req.body;
+    if (!variant_id) return res.status(400).json({ error: "variant_id is required" });
+    if (!VARIANT_GID_RE.test(variant_id)) {
+      return res.status(400).json({ error: "variant_id must be a Shopify GID: gid://shopify/ProductVariant/{id}" });
+    }
+
+    const result = await fetchVariantPrice(variant_id);
+    if (!result) return res.status(404).json({ error: "Variant not found" });
+
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const VARIANT_STOCK_QUERY = `
+  query VariantStock($id: ID!, $locationId: ID!) {
+    productVariant(id: $id) {
+      id
+      sku
+      variantTitle: metafield(namespace: "custom", key: "variant_title") {
+        value
+      }
+      inventoryItem {
+        inventoryLevel(locationId: $locationId) {
+          quantities(names: ["available"]) {
+            quantity
+          }
         }
       }
-    `;
-    const data = await shopifyGraphQL(query, { id: variant_id });
-    const v = data.productVariant;
+      stockAlemania: metafield(namespace: "stock", key: "alemania") {
+        value
+      }
+    }
+  }
+`;
 
-    const html = v?.product?.descriptionHtml || "";
-    res.json({
-      variant_id: v?.id,
-      sku: v?.sku,
-      title: v?.product?.title,
-      vendor: v?.product?.vendor,
-      description_text: htmlToText(html)
-    });
+async function fetchVariantStock(variant_id) {
+  if (!VITORIA_LOCATION_ID) throw new Error("SHOPIFY_VITORIA_LOCATION_ID not set");
+  const data = await shopifyGraphQL(VARIANT_STOCK_QUERY, { id: variant_id, locationId: VITORIA_LOCATION_ID });
+  const v = data.productVariant;
+  if (!v) return null;
+  const vitoriaQty = v.inventoryItem?.inventoryLevel?.quantities?.[0]?.quantity ?? null;
+  return {
+    variant_id: v.id,
+    sku: v.sku,
+    title: v.variantTitle?.value ?? null,
+    stock_vitoria: vitoriaQty,
+    stock_alemania: v.stockAlemania?.value ? Number(v.stockAlemania.value) : null,
+  };
+}
+
+app.post("/variant_stock", async (req, res) => {
+  try {
+    const { variant_id } = req.body;
+    if (!variant_id) return res.status(400).json({ error: "variant_id is required" });
+    if (!VARIANT_GID_RE.test(variant_id)) {
+      return res.status(400).json({ error: "variant_id must be a Shopify GID: gid://shopify/ProductVariant/{id}" });
+    }
+
+    const result = await fetchVariantStock(variant_id);
+    if (!result) return res.status(404).json({ error: "Variant not found" });
+
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
