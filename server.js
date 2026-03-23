@@ -110,16 +110,43 @@ app.post("/resolve_reference", async (req, res) => {
     const normRaw = normalizeQuery(raw);
     const normRef = ref ? normalizeQuery(ref) : null;
 
+    // stripped: quita TODOS los separadores sin re-insertar espacios
+    const stripped = (raw || "").replace(/[\s\-]/g, "");
+    // boundary: inserta guiones en cada transición letra↔dígito del stripped
+    // cubre patrones Gedore tipo "19Emu20" → "19-Emu-20"
+    const boundary = stripped
+      .replace(/([a-zA-Z])(\d)/g, "$1-$2")
+      .replace(/(\d)([a-zA-Z])/g, "$1-$2");
+
     const active = "product_status:active";
+    const seen = new Set();
+    const addQ = (q) => { if (q && !seen.has(q)) { seen.add(q); qCandidates.push(q); } };
 
-    // búsqueda por SKU (evita falsos positivos por descripción u otros campos)
-    if (raw) qCandidates.push(`sku:"${raw}" ${active}`);
-    if (ref && ref !== raw) qCandidates.push(`sku:"${ref}" ${active}`);
-    if (code) qCandidates.push(`sku:"${code}" ${active}`);
+    // 1. exacta: lo que dijo el usuario tal cual
+    if (raw) addQ(`sku:"${raw}" ${active}`);
+    if (ref && ref !== raw) addQ(`sku:"${ref}" ${active}`);
+    if (code) addQ(`sku:"${code}" ${active}`);
 
-    // búsqueda normalizada por SKU (ignora espacios y guiones, tolera splits distintos)
-    if (normRaw && normRaw !== raw) qCandidates.push(`sku:"${normRaw}" ${active}`);
-    if (normRef && normRef !== ref) qCandidates.push(`sku:"${normRef}" ${active}`);
+    // 2. normalizada: ignora separadores y añade espacio en transiciones letra↔dígito
+    if (normRaw !== raw) addQ(`sku:"${normRaw}" ${active}`);
+    if (normRef && normRef !== ref) addQ(`sku:"${normRef}" ${active}`);
+
+    // 3. boundary-hyphenated: guiones en todas las transiciones letra↔dígito
+    // ej: "19Emu20" → "19-Emu-20", "1993U20" → "1993-U-20"
+    if (boundary !== raw && boundary !== stripped) addQ(`sku:"${boundary}" ${active}`);
+
+    // 4. completamente limpia (sin ningún separador)
+    // ej: "TFK 100" → "TFK100"
+    if (stripped !== raw && stripped !== normRaw) addQ(`sku:"${stripped}" ${active}`);
+
+    // 5. todas las variantes con un solo guión sobre el stripped
+    // cubre casos donde el guión va entre letras: "TFK100" → "TF-K100"
+    // se aplica solo a refs cortas para mantener el nº de queries razonable
+    if (stripped.length >= 2 && stripped.length <= 14) {
+      for (let i = 1; i < stripped.length; i++) {
+        addQ(`sku:"${stripped.slice(0, i)}-${stripped.slice(i)}" ${active}`);
+      }
+    }
 
     const query = `
       query Variants($q: String!) {
