@@ -71,7 +71,7 @@ const VARIANT_DESC_QUERY = `
       metafield(namespace: "custom", key: "variant_title") {
         value
       }
-      product { id title vendor }
+      product { id title vendor descriptionHtml }
     }
   }
 `;
@@ -85,7 +85,8 @@ async function fetchVariantDescription(variant_id) {
     sku: v.sku,
     title: v.product?.title,
     vendor: v.product?.vendor,
-    description_text: v.metafield?.value ?? null,
+    variant_title: v.metafield?.value ?? null,
+    description_text: v.product?.descriptionHtml ? htmlToText(v.product.descriptionHtml) : null,
   };
 }
 
