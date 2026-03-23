@@ -68,7 +68,10 @@ const VARIANT_DESC_QUERY = `
     productVariant(id: $id) {
       id
       sku
-      metafield(namespace: "custom", key: "variant_title") {
+      variantTitle: metafield(namespace: "custom", key: "variant_title") {
+        value
+      }
+      mpn: metafield(namespace: "mm-google-shopping", key: "mpn") {
         value
       }
       product { id title vendor descriptionHtml }
@@ -85,7 +88,8 @@ async function fetchVariantDescription(variant_id) {
     sku: v.sku,
     title: v.product?.title,
     vendor: v.product?.vendor,
-    variant_title: v.metafield?.value ?? null,
+    variant_title: v.variantTitle?.value ?? null,
+    codigo: v.mpn?.value ?? null,
     description_text: v.product?.descriptionHtml ? htmlToText(v.product.descriptionHtml) : null,
   };
 }
