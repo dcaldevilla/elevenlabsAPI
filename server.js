@@ -75,6 +75,8 @@ const VARIANT_DESC_QUERY = `
     productVariant(id: $id) {
       id
       sku
+      weight
+      weightUnit
       variantTitle: metafield(namespace: "custom", key: "variant_title") {
         value
       }
@@ -97,6 +99,7 @@ async function fetchVariantDescription(variant_id) {
     vendor: v.product?.vendor,
     variant_title: v.variantTitle?.value ?? null,
     codigo: v.mpn?.value ?? null,
+    peso: v.weight != null ? `${v.weight} ${v.weightUnit}` : null,
     description_text: v.product?.descriptionHtml ? htmlToText(v.product.descriptionHtml) : null,
   };
 }
