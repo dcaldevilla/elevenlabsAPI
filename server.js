@@ -99,7 +99,7 @@ async function fetchVariantDescription(variant_id) {
     vendor: v.product?.vendor,
     variant_title: v.variantTitle?.value ?? null,
     codigo: v.mpn?.value ?? null,
-    peso: v.weight != null ? `${v.weight} ${v.weightUnit}` : null,
+    peso: v.weight != null ? `${v.weight} ${{ KILOGRAMS: "kg", GRAMS: "g", POUNDS: "lb", OUNCES: "oz" }[v.weightUnit] ?? v.weightUnit}` : null,
     description_text: v.product?.descriptionHtml ? htmlToText(v.product.descriptionHtml) : null,
   };
 }
