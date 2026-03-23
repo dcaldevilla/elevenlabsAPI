@@ -118,7 +118,13 @@ app.post("/resolve_reference", async (req, res) => {
             id
             sku
             barcode
-            product { id title vendor }
+            variantTitle: metafield(namespace: "custom", key: "variant_title") {
+              value
+            }
+            mpn: metafield(namespace: "mm-google-shopping", key: "mpn") {
+              value
+            }
+            product { id vendor }
           }
         }
       }
@@ -132,7 +138,8 @@ app.post("/resolve_reference", async (req, res) => {
         variant_id: v.id,
         sku: parseSku(v.sku).ref ?? v.sku,
         barcode: v.barcode,
-        title: v.product?.title,
+        variant_title: v.variantTitle?.value ?? null,
+        codigo: v.mpn?.value ?? null,
         vendor: v.product?.vendor,
       }));
       if (candidates.length) break;
