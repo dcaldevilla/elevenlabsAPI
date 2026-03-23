@@ -75,21 +75,10 @@ const VARIANT_DESC_QUERY = `
     productVariant(id: $id) {
       id
       sku
-      weight
-      weightUnit
       variantTitle: metafield(namespace: "custom", key: "variant_title") {
         value
       }
       mpn: metafield(namespace: "mm-google-shopping", key: "mpn") {
-        value
-      }
-      longitud: metafield(namespace: "custom", key: "longitud_mm_") {
-        value
-      }
-      anchura: metafield(namespace: "custom", key: "anchura_mm_") {
-        value
-      }
-      altura: metafield(namespace: "custom", key: "altura_mm_") {
         value
       }
       product { id title vendor descriptionHtml }
@@ -108,10 +97,6 @@ async function fetchVariantDescription(variant_id) {
     vendor: v.product?.vendor,
     variant_title: v.variantTitle?.value ?? null,
     codigo: v.mpn?.value ?? null,
-    peso: v.weight != null ? `${v.weight} ${{ KILOGRAMS: "kg", GRAMS: "g", POUNDS: "lb", OUNCES: "oz" }[v.weightUnit] ?? v.weightUnit}` : null,
-    longitud: v.longitud?.value ? `${v.longitud.value} mm` : null,
-    anchura: v.anchura?.value ? `${v.anchura.value} mm` : null,
-    altura: v.altura?.value ? `${v.altura.value} mm` : null,
     description_text: v.product?.descriptionHtml ? htmlToText(v.product.descriptionHtml) : null,
   };
 }
@@ -187,6 +172,90 @@ app.post("/description_text", async (req, res) => {
     const result = await fetchVariantDescription(variant_id);
     if (!result) return res.status(404).json({ error: "Variant not found" });
 
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const VARIANT_WEIGHT_QUERY = `
+  query VariantWeight($id: ID!) {
+    productVariant(id: $id) {
+      id
+      sku
+      weight
+      weightUnit
+    }
+  }
+`;
+
+async function fetchVariantWeight(variant_id) {
+  const data = await shopifyGraphQL(VARIANT_WEIGHT_QUERY, { id: variant_id });
+  const v = data.productVariant;
+  if (!v) return null;
+  const units = { KILOGRAMS: "kg", GRAMS: "g", POUNDS: "lb", OUNCES: "oz" };
+  return {
+    variant_id: v.id,
+    sku: parseSku(v.sku).ref ?? v.sku,
+    peso: v.weight != null ? `${v.weight} ${units[v.weightUnit] ?? v.weightUnit}` : null,
+  };
+}
+
+app.post("/variant_weight", async (req, res) => {
+  try {
+    const { variant_id } = req.body;
+    if (!variant_id) return res.status(400).json({ error: "variant_id is required" });
+    if (!VARIANT_GID_RE.test(variant_id)) {
+      return res.status(400).json({ error: "variant_id must be a Shopify GID: gid://shopify/ProductVariant/{id}" });
+    }
+    const result = await fetchVariantWeight(variant_id);
+    if (!result) return res.status(404).json({ error: "Variant not found" });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const VARIANT_DIMENSIONS_QUERY = `
+  query VariantDimensions($id: ID!) {
+    productVariant(id: $id) {
+      id
+      sku
+      longitud: metafield(namespace: "custom", key: "longitud_mm_") {
+        value
+      }
+      anchura: metafield(namespace: "custom", key: "anchura_mm_") {
+        value
+      }
+      altura: metafield(namespace: "custom", key: "altura_mm_") {
+        value
+      }
+    }
+  }
+`;
+
+async function fetchVariantDimensions(variant_id) {
+  const data = await shopifyGraphQL(VARIANT_DIMENSIONS_QUERY, { id: variant_id });
+  const v = data.productVariant;
+  if (!v) return null;
+  return {
+    variant_id: v.id,
+    sku: parseSku(v.sku).ref ?? v.sku,
+    longitud: v.longitud?.value ? `${v.longitud.value} mm` : null,
+    anchura: v.anchura?.value ? `${v.anchura.value} mm` : null,
+    altura: v.altura?.value ? `${v.altura.value} mm` : null,
+  };
+}
+
+app.post("/variant_dimensions", async (req, res) => {
+  try {
+    const { variant_id } = req.body;
+    if (!variant_id) return res.status(400).json({ error: "variant_id is required" });
+    if (!VARIANT_GID_RE.test(variant_id)) {
+      return res.status(400).json({ error: "variant_id must be a Shopify GID: gid://shopify/ProductVariant/{id}" });
+    }
+    const result = await fetchVariantDimensions(variant_id);
+    if (!result) return res.status(404).json({ error: "Variant not found" });
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
