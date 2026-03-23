@@ -83,6 +83,15 @@ const VARIANT_DESC_QUERY = `
       mpn: metafield(namespace: "mm-google-shopping", key: "mpn") {
         value
       }
+      longitud: metafield(namespace: "custom", key: "longitud_mm_") {
+        value
+      }
+      anchura: metafield(namespace: "custom", key: "anchura_mm_") {
+        value
+      }
+      altura: metafield(namespace: "custom", key: "altura_mm_") {
+        value
+      }
       product { id title vendor descriptionHtml }
     }
   }
@@ -100,6 +109,9 @@ async function fetchVariantDescription(variant_id) {
     variant_title: v.variantTitle?.value ?? null,
     codigo: v.mpn?.value ?? null,
     peso: v.weight != null ? `${v.weight} ${{ KILOGRAMS: "kg", GRAMS: "g", POUNDS: "lb", OUNCES: "oz" }[v.weightUnit] ?? v.weightUnit}` : null,
+    longitud: v.longitud?.value ? `${v.longitud.value} mm` : null,
+    anchura: v.anchura?.value ? `${v.anchura.value} mm` : null,
+    altura: v.altura?.value ? `${v.altura.value} mm` : null,
     description_text: v.product?.descriptionHtml ? htmlToText(v.product.descriptionHtml) : null,
   };
 }
