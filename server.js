@@ -85,7 +85,7 @@ async function fetchVariantDescription(variant_id) {
   if (!v) return null;
   return {
     variant_id: v.id,
-    sku: v.sku,
+    sku: parseSku(v.sku).ref ?? v.sku,
     title: v.product?.title,
     vendor: v.product?.vendor,
     variant_title: v.variantTitle?.value ?? null,
