@@ -48,6 +48,13 @@ function parseSku(text) {
   return { ref: s, code: null, raw: s };
 }
 
+function normalizeQuery(s) {
+  return (s || "")
+    .replace(/[\s\-]/g, "")               // quita espacios y guiones
+    .replace(/([a-zA-Z])(\d)/g, "$1 $2")  // letra→número: "U20" → "U 20"
+    .replace(/(\d)([a-zA-Z])/g, "$1 $2"); // número→letra: "1993U" → "1993 U"
+}
+
 function htmlToText(html = "") {
   return he.decode(
     html
@@ -100,11 +107,17 @@ app.post("/resolve_reference", async (req, res) => {
     const { ref, code, raw } = parseSku(text);
 
     const qCandidates = [];
+    const normRaw = normalizeQuery(raw);
+    const normRef = ref ? normalizeQuery(ref) : null;
 
     // búsqueda amplia (más flexible)
     if (raw) qCandidates.push(raw);
     if (ref) qCandidates.push(ref);
     if (code) qCandidates.push(code);
+
+    // búsqueda normalizada (ignora espacios y guiones, tolera splits distintos)
+    if (normRaw && normRaw !== raw) qCandidates.push(normRaw);
+    if (normRef && normRef !== ref) qCandidates.push(normRef);
 
     // búsqueda específica por sku como fallback
     if (raw) qCandidates.push(`sku:"${raw}"`);
