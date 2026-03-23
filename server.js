@@ -148,6 +148,21 @@ app.post("/resolve_reference", async (req, res) => {
       }
     }
 
+    // 6. extracción de números para descripciones en lenguaje natural
+    // ej: "cincel 97 de 125mm" → prueba "97-125", "125-97"
+    // solo se activa si el input contiene palabras descriptivas (≥3 letras seguidas)
+    // y al menos 2 números distintos; se prueban todos los pares con guión
+    if (/[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]{3,}/.test(raw || "")) {
+      const nums = [...new Set((raw || "").match(/\d+/g) || [])].slice(0, 4);
+      if (nums.length >= 2) {
+        for (let i = 0; i < nums.length; i++) {
+          for (let j = 0; j < nums.length; j++) {
+            if (i !== j) addQ(`sku:"${nums[i]}-${nums[j]}" ${active}`);
+          }
+        }
+      }
+    }
+
     const query = `
       query Variants($q: String!) {
         productVariants(first: 10, query: $q) {
