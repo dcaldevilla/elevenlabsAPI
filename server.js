@@ -112,19 +112,14 @@ app.post("/resolve_reference", async (req, res) => {
 
     const active = "product_status:active";
 
-    // búsqueda amplia (más flexible)
-    if (raw) qCandidates.push(`${raw} ${active}`);
-    if (ref) qCandidates.push(`${ref} ${active}`);
-    if (code) qCandidates.push(`${code} ${active}`);
-
-    // búsqueda normalizada (ignora espacios y guiones, tolera splits distintos)
-    if (normRaw && normRaw !== raw) qCandidates.push(`${normRaw} ${active}`);
-    if (normRef && normRef !== ref) qCandidates.push(`${normRef} ${active}`);
-
-    // búsqueda específica por sku como fallback
+    // búsqueda por SKU (evita falsos positivos por descripción u otros campos)
     if (raw) qCandidates.push(`sku:"${raw}" ${active}`);
-    if (ref) qCandidates.push(`sku:"${ref}" ${active}`);
+    if (ref && ref !== raw) qCandidates.push(`sku:"${ref}" ${active}`);
     if (code) qCandidates.push(`sku:"${code}" ${active}`);
+
+    // búsqueda normalizada por SKU (ignora espacios y guiones, tolera splits distintos)
+    if (normRaw && normRaw !== raw) qCandidates.push(`sku:"${normRaw}" ${active}`);
+    if (normRef && normRef !== ref) qCandidates.push(`sku:"${normRef}" ${active}`);
 
     const query = `
       query Variants($q: String!) {
