@@ -183,8 +183,14 @@ const VARIANT_WEIGHT_QUERY = `
     productVariant(id: $id) {
       id
       sku
-      weight
-      weightUnit
+      inventoryItem {
+        measurement {
+          weight {
+            unit
+            value
+          }
+        }
+      }
     }
   }
 `;
@@ -194,10 +200,11 @@ async function fetchVariantWeight(variant_id) {
   const v = data.productVariant;
   if (!v) return null;
   const units = { KILOGRAMS: "kg", GRAMS: "g", POUNDS: "lb", OUNCES: "oz" };
+  const w = v.inventoryItem?.measurement?.weight;
   return {
     variant_id: v.id,
     sku: parseSku(v.sku).ref ?? v.sku,
-    peso: v.weight != null ? `${v.weight} ${units[v.weightUnit] ?? v.weightUnit}` : null,
+    peso: w?.value != null ? `${w.value} ${units[w.unit] ?? w.unit}` : null,
   };
 }
 
