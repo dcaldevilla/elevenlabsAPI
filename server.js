@@ -149,10 +149,9 @@ app.post("/resolve_reference", async (req, res) => {
     }
 
     // 6. extracción de números para descripciones en lenguaje natural
-    // ej: "cincel 97 de 125mm" → prueba "97-125", "125-97"
-    // solo se activa si el input contiene palabras descriptivas (≥3 letras seguidas)
-    // y al menos 2 números distintos; se prueban todos los pares con guión
-    if (/[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]{3,}/.test(raw || "")) {
+    // ej: "cincel 97 de 125mm" → "97-125", "8250 de 180 mm" → "8250-180"
+    // se activa siempre que haya ≥2 números distintos (sin restricción de letras)
+    {
       const nums = [...new Set((raw || "").match(/\d+/g) || [])].slice(0, 4);
       if (nums.length >= 2) {
         for (let i = 0; i < nums.length; i++) {
