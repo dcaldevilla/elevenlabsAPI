@@ -130,7 +130,7 @@ app.post("/resolve_reference", async (req, res) => {
       const nodes = data?.productVariants?.nodes || [];
       candidates = nodes.map(v => ({
         variant_id: v.id,
-        sku: v.sku,
+        sku: parseSku(v.sku).ref ?? v.sku,
         barcode: v.barcode,
         title: v.product?.title,
         vendor: v.product?.vendor,
